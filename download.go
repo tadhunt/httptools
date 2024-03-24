@@ -17,15 +17,21 @@ const (
 	DL_MaxTries     = 5
 )
 
-func HTTPDownload(srcUrl string, dstPath string) error {
+func Download(srcUrl string, dstPath string) error {
 	log := logger.NewCompatLogWriter(logger.LogLevel_DEBUG)
 
 	f, err := os.Create(dstPath)
 	if err != nil {
-		return log.ErrFmt("%s: %v", srcUrl, err)
+		return log.ErrFmt("%s: create %s: %v", srcUrl, dstPath, err)
 	}
 
 	defer f.Close()
+
+	return DownloadTo(srcUrl, f)
+}
+
+func DownloadTo(srcUrl string, dst io.Writer) error {
+	log := logger.NewCompatLogWriter(logger.LogLevel_DEBUG)
 
 	retrier := retry.NewRetrier(DL_MaxTries, DL_InitialDelay, DL_MaxDelay)
 
@@ -35,7 +41,7 @@ func HTTPDownload(srcUrl string, dstPath string) error {
 
 	ctx := context.Background()
 
-	err = retrier.RunContext(ctx, func(c context.Context) error {
+	err := retrier.RunContext(ctx, func(c context.Context) error {
 		now := time.Now()
 		total := now.Sub(start)
 		sinceLast := now.Sub(last)
@@ -55,7 +61,7 @@ func HTTPDownload(srcUrl string, dstPath string) error {
 		default:
 			return retry.Stop(log.ErrFmt("%s: %v", srcUrl, r.Status))
 		case r.StatusCode == http.StatusOK:
-			_, err = io.Copy(f, r.Body)
+			_, err = io.Copy(dst, r.Body)
 			if err != nil {
 				return retry.Stop(log.ErrFmt("%s: %v", srcUrl, err))
 			}
